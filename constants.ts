@@ -42,10 +42,10 @@ export const KITE_DESIGNS = [
 ];
 
 export const KITE_TYPES = [
-  { name: 'Guddi', speed: 1.0, agility: 1.3, healthBonus: 0, description: 'Balanced for beginners' },
-  { name: 'Patang', speed: 1.4, agility: 1.0, healthBonus: 50, description: 'Heavy & powerful' },
-  { name: 'Pari', speed: 1.2, agility: 2.2, healthBonus: -40, description: 'Unmatched agility' },
-  { name: 'Tukkal', speed: 0.8, agility: 0.7, healthBonus: 120, description: 'Tank of the sky' },
+  { id: 'kt1', name: 'Guddi', speed: 1.0, agility: 1.3, healthBonus: 0, description: 'Balanced for beginners', cost: 0 },
+  { id: 'kt2', name: 'Patang', speed: 1.4, agility: 1.0, healthBonus: 50, description: 'Heavy & powerful', cost: 2000 },
+  { id: 'kt3', name: 'Pari', speed: 1.2, agility: 2.2, healthBonus: -40, description: 'Unmatched agility', cost: 5000 },
+  { id: 'kt4', name: 'Tukkal', speed: 0.8, agility: 0.7, healthBonus: 120, description: 'Tank of the sky', cost: 12000 },
 ];
 
 export const CHAKRI_DESIGNS = [
