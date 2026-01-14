@@ -8,7 +8,10 @@ import {
   KITE_COLORS,
   TENSION_GROWTH,
   TENSION_RECOVERY,
-  MAX_TENSION_LIMIT
+  MAX_TENSION_LIMIT,
+  TRAIL_BASE_LENGTH,
+  TRAIL_SPEED_IMPACT,
+  TRAIL_MAX_LIMIT
 } from '../constants';
 
 interface GameCanvasProps {
@@ -52,6 +55,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const windRef = useRef<WindState>({
     angle: 0, strength: 0.5, targetAngle: 0, targetStrength: 0.5
   });
+
+  // Reference to store player's motion history for the "trail" effect
+  const playerTrailRef = useRef<Vector2D[]>([]);
 
   // Use a ref for controls to avoid recreating the update loop on every input change
   const controlsRef = useRef(controls);
@@ -103,6 +109,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
   const initGame = useCallback(() => {
     soundManager.init();
+    playerTrailRef.current = [];
     const playerBaseHealth = (playerManjha.durability + playerKiteType.healthBonus + 250) * (currentLevel.durabilityMult || 1.0);
     
     const initialKites: Kite[] = [{
@@ -196,8 +203,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
               setGameState(GameState.PLAYING);
             }
           } else {
-            const agility = (playerKiteType.agility || 1.0) * 1.35;
-            const moveSpeed = 1.8 * playerKiteType.speed;
+            const agility = (playerKiteType.agility || 1.0) * 1.2; // Slightly reduced agility impact
+            const moveSpeed = 1.2 * playerKiteType.speed; // Reduced base move multiplier from 1.8 to 1.2
             const ctrl = controlsRef.current;
             
             if (ctrl.left) k.velocity.x -= moveSpeed * agility;
@@ -209,11 +216,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             k.velocity.y += windForceY;
 
             if (ctrl.kheech) {
-              k.velocity.y += 3.2; 
+              k.velocity.y += 1.8; // Reduced from 3.2
               k.tension = Math.min(MAX_TENSION_LIMIT + 50, k.tension + TENSION_GROWTH * 3.0);
               k.cuttingPower = k.manjhaStrength * 18.0;
             } else if (ctrl.dheel) {
-              k.velocity.y -= 4.0; 
+              k.velocity.y -= 2.2; // Reduced from 4.0
               k.tension = Math.max(0, k.tension - TENSION_RECOVERY * 4.5);
               k.cuttingPower = k.manjhaStrength * 0.2;
             } else {
@@ -221,9 +228,27 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
               k.tension = Math.max(0, k.tension - TENSION_RECOVERY * 0.8);
               k.cuttingPower = k.manjhaStrength * 2.0;
             }
-            k.velocity.x *= 0.92; k.velocity.y *= 0.92;
+            k.velocity.x *= 0.88; k.velocity.y *= 0.88; // Increased damping from 0.92 to 0.88 for more control
             if (k.tension > MAX_TENSION_LIMIT) k.health -= 2.0;
           }
+
+          // Update player motion history for trails with dynamic length
+          if (playerManjha.trail) {
+            playerTrailRef.current.unshift({ ...k.pos });
+            const speedMagnitude = Math.sqrt(k.velocity.x**2 + k.velocity.y**2);
+            // Dynamic controllable length calculation
+            const targetTrailLength = Math.floor(
+              TRAIL_BASE_LENGTH + 
+              (speedMagnitude * TRAIL_SPEED_IMPACT) + 
+              (k.tension / 10)
+            );
+            const finalTrailLimit = Math.min(TRAIL_MAX_LIMIT, targetTrailLength);
+            
+            if (playerTrailRef.current.length > finalTrailLimit) {
+              playerTrailRef.current.splice(finalTrailLimit);
+            }
+          }
+
           hudSyncRef.current = { tension: k.tension, health: (k.health / k.maxHealth) * 100, glideEnergy: 100 };
         } else {
           if (gameState === GameState.PLAYING && playerKite) {
@@ -232,15 +257,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             const dist = Math.sqrt(dx*dx + dy*dy);
             
             if (dist < 600) {
-              const skill = k.difficulty === AIDifficulty.PRO ? 0.15 : 0.07;
-              k.velocity.x += dx * skill + Math.sin(time / 300) * 2.0 + windForceX;
+              const skill = k.difficulty === AIDifficulty.PRO ? 0.12 : 0.05; // Slightly slower AI pursuit
+              k.velocity.x += dx * skill + Math.sin(time / 300) * 1.5 + windForceX;
               k.velocity.y += dy * skill + GRAVITY * 1.2 + windForceY;
             } else {
-              k.velocity.x += (Math.random() - 0.5) * 1.5 + windForceX;
-              k.velocity.y += (Math.random() - 0.5) * 1.5 + windForceY;
+              k.velocity.x += (Math.random() - 0.5) * 1.0 + windForceX;
+              k.velocity.y += (Math.random() - 0.5) * 1.0 + windForceY;
             }
           }
-          k.velocity.x *= 0.9; k.velocity.y *= 0.9;
+          k.velocity.x *= 0.88; k.velocity.y *= 0.88;
           k.cuttingPower = k.manjhaStrength * 3.5;
         }
 
@@ -382,6 +407,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fillStyle = primary; ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size, 0); ctx.lineTo(0, size); ctx.closePath(); ctx.fill();
         ctx.fillStyle = secondary; ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(-size, 0); ctx.lineTo(0, size); ctx.closePath(); ctx.fill();
         break;
+      case 'dragon':
+        ctx.fillStyle = primary; ctx.fillRect(-size, -size, size*2, size*2);
+        ctx.fillStyle = secondary;
+        ctx.beginPath(); ctx.moveTo(-size, 0); ctx.lineTo(0, -size/2); ctx.lineTo(size, 0); ctx.lineTo(0, size/2); ctx.closePath(); ctx.fill();
+        break;
       default:
         ctx.fillStyle = primary; ctx.fillRect(-size, -size, size*2, size*2);
         break;
@@ -405,6 +435,32 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     kites.forEach(kite => {
       if (!kite.active && !kite.isDrifting) return;
       
+      // Draw Motion Trail for Premium Manjha
+      // Condition: Only draw if the kite is the player, has trail enabled, is active, and NOT drifting (cut).
+      if (kite.isPlayer && playerManjha.trail && kite.active && !kite.isDrifting && playerTrailRef.current.length > 1) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(playerTrailRef.current[0].x, playerTrailRef.current[0].y);
+        for (let i = 1; i < playerTrailRef.current.length; i++) {
+          const seg = playerTrailRef.current[i];
+          ctx.lineTo(seg.x, seg.y);
+        }
+        ctx.strokeStyle = playerManjha.color;
+        ctx.lineWidth = 18; // Controllable visibility
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.25; 
+        ctx.shadowBlur = 20; 
+        ctx.shadowColor = playerManjha.color;
+        ctx.stroke();
+        
+        // Inner core glow line for a "streak" effect
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = 0.6;
+        ctx.stroke();
+        ctx.restore();
+      }
+
       if (!kite.isDrifting) {
         const sx = kite.isPlayer ? dimensions.width/2 : kite.pos.x + 50; 
         const sy = dimensions.height - 420;

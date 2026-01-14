@@ -28,6 +28,8 @@ const ChakriComponent = ({ active, tension, design }: { active: boolean, tension
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
   const [showShop, setShowShop] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [shopTab, setShopTab] = useState<'kites' | 'manjha' | 'gear'>('kites');
   const [score, setScore] = useState(0);
   const [coins, setCoins] = useState(() => parseInt(localStorage.getItem('patang_coins_v2') || '500'));
   const [currentLevelIndex, setCurrentLevelIndex] = useState(() => parseInt(localStorage.getItem('patang_current_level_v2') || '0'));
@@ -42,6 +44,10 @@ const App: React.FC = () => {
   const [commentary, setCommentary] = useState<CommentaryMessage[]>([]);
   const [controls, setControls] = useState({ up: false, down: false, left: false, right: false, dheel: false, kheech: false, glide: false });
   
+  // Quick Settings State
+  const [masterVolume, setMasterVolume] = useState(50);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+
   const touchStartPos = useRef<{x: number, y: number} | null>(null);
 
   useEffect(() => {
@@ -49,6 +55,10 @@ const App: React.FC = () => {
     localStorage.setItem('patang_current_level_v2', currentLevelIndex.toString());
     localStorage.setItem('patang_unlocked_v2', JSON.stringify(unlockedItems));
   }, [coins, currentLevelIndex, unlockedItems]);
+
+  useEffect(() => {
+    soundManager.setMasterVolume(masterVolume / 100);
+  }, [masterVolume]);
 
   const addCommentary = (text: string, type: 'success' | 'danger' | 'info' | 'combo') => {
     const msg = { text, type, timestamp: Date.now() };
@@ -61,13 +71,13 @@ const App: React.FC = () => {
   const handleKiteCut = async (isPlayer: boolean, isBoss?: boolean) => {
     if (isPlayer) { 
       setGameState(GameState.GAME_OVER); 
-      await playVoiceCommentary("Oh ho! Teri patang kat gayi!", "Kore"); 
+      if (voiceEnabled) await playVoiceCommentary("Oh ho! Teri patang kat gayi!", "Kore"); 
     }
     else {
       setCoins(c => c + (isBoss ? 25000 : 5000)); 
       addCommentary(isBoss ? "KING DEFEATED!" : "KAI PO CHE!", 'success');
       const reaction = await getCommentary(isBoss ? "Defeated boss kite" : "Cut opponent kite", score);
-      await playVoiceCommentary(reaction, "Kore");
+      if (voiceEnabled) await playVoiceCommentary(reaction, "Kore");
     }
   };
 
@@ -107,6 +117,8 @@ const App: React.FC = () => {
       setUnlockedItems(u => [...u, item.id]);
       setSelected(item);
       soundManager.playPurchase();
+    } else {
+      // Small shake feedback or similar could go here
     }
   };
 
@@ -121,15 +133,72 @@ const App: React.FC = () => {
         playerManjha={selectedManjha} playerOutfit={selectedOutfit} currentLevel={currentLevel} setScore={setScore}
         setTension={setTension} setHealth={setHealth} setGlideEnergy={() => {}} controls={controls} />
 
+      {/* Quick Settings Button */}
+      <button 
+        onClick={(e) => { e.stopPropagation(); setShowSettings(true); }}
+        className="absolute top-4 right-4 z-[60] w-10 h-10 bg-white/20 backdrop-blur-md rounded-full border border-white/30 flex items-center justify-center text-xl hover:bg-white/40 transition-all active:scale-90"
+      >
+        ⚙️
+      </button>
+
+      {/* Settings Overlay */}
+      {showSettings && (
+        <div className="absolute inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-md" onClick={() => setShowSettings(false)}>
+          <div className="max-w-xs w-full bg-white rounded-[2rem] p-8 shadow-2xl border-4 border-white animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bangers text-slate-800 tracking-tight">SETTINGS</h2>
+              <button onClick={() => setShowSettings(false)} className="text-2xl opacity-50 hover:opacity-100 transition-opacity">✕</button>
+            </div>
+
+            <div className="space-y-8">
+              <section>
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Master Volume</p>
+                  <p className="text-xs font-bold text-slate-800">{masterVolume}%</p>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" max="100" 
+                  value={masterVolume} 
+                  onChange={(e) => setMasterVolume(parseInt(e.target.value))}
+                  className="w-full h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-orange-500"
+                />
+              </section>
+
+              <section className="flex justify-between items-center">
+                <div className="flex flex-col">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Voice Commentary</p>
+                  <p className="text-[10px] text-slate-400">AI Rooftop Banter</p>
+                </div>
+                <button 
+                  onClick={() => setVoiceEnabled(!voiceEnabled)}
+                  className={`w-14 h-8 rounded-full p-1 transition-all ${voiceEnabled ? 'bg-orange-500' : 'bg-slate-200'}`}
+                >
+                  <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-transform ${voiceEnabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </section>
+
+              <button 
+                onClick={() => setShowSettings(false)}
+                className="w-full py-4 bg-slate-800 text-white rounded-2xl font-black text-xs tracking-widest uppercase hover:bg-slate-700 transition-colors mt-4"
+              >
+                DONE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {gameState === GameState.START && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xl">
           {!showShop ? (
-            <div className="max-w-sm w-full bg-white/95 rounded-[3rem] p-10 shadow-2xl flex flex-col items-center border-4 border-white">
+            <div className="max-w-sm w-full bg-white/95 rounded-[3rem] p-10 shadow-2xl flex flex-col items-center border-4 border-white transition-all transform hover:scale-[1.02]">
               <div className="absolute -top-12 bg-orange-500 text-white px-10 py-4 rounded-full font-bangers text-6xl shadow-2xl rotate-[-2deg]">PATANG</div>
               
-              <div className="mt-8 mb-8 relative group">
+              <div className="mt-8 mb-8 relative group cursor-pointer" onClick={() => setShowShop(true)}>
                 <div className="absolute inset-0 bg-orange-200 blur-3xl opacity-50 group-hover:opacity-100 transition-opacity" />
                 <span className="text-[120px] relative drop-shadow-xl block animate-bounce" style={{ color: selectedDesign.color }}>🪁</span>
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] font-black px-3 py-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">CUSTOMIZE</div>
               </div>
 
               <div className="w-full grid grid-cols-2 gap-4 mb-8">
@@ -150,7 +219,7 @@ const App: React.FC = () => {
               
               <div className="flex w-full gap-4">
                 <button onClick={(e) => { e.stopPropagation(); setShowShop(true); }} className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-black text-xs tracking-widest uppercase hover:bg-slate-700 transition-colors">Bazaar 🛒</button>
-                <button className="flex-1 py-4 bg-white text-slate-800 border-2 border-slate-200 rounded-2xl font-black text-xs tracking-widest uppercase">Global 🏆</button>
+                <button className="flex-1 py-4 bg-white text-slate-800 border-2 border-slate-200 rounded-2xl font-black text-xs tracking-widest uppercase opacity-50 cursor-not-allowed">Global 🏆</button>
               </div>
             </div>
           ) : (
@@ -160,105 +229,124 @@ const App: React.FC = () => {
                 <h1 className="text-4xl font-bangers text-orange-500 tracking-wider">BAZAAR</h1>
                 <div className="bg-orange-100 px-4 py-2 rounded-full font-bold text-sm text-orange-700">₹{coins}</div>
               </div>
+
+              {/* Shop Tabs */}
+              <div className="flex gap-2 mb-6 bg-slate-100 p-1.5 rounded-2xl">
+                {(['kites', 'manjha', 'gear'] as const).map(tab => (
+                  <button key={tab} onClick={() => setShopTab(tab)}
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${shopTab === tab ? 'bg-white shadow-md text-orange-600' : 'text-slate-500 hover:text-slate-800'}`}>
+                    {tab}
+                  </button>
+                ))}
+              </div>
               
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-8">
-                {/* Kite Types */}
-                <section>
-                  <h3 className="text-xs font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Kite Types (Shape & Stats)</h3>
-                  <div className="grid grid-cols-1 gap-3">
-                    {KITE_TYPES.map(kt => (
-                      <div key={kt.id} className={`p-4 border-2 rounded-2xl flex justify-between items-center transition-all ${selectedKite.id === kt.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'bg-white border-slate-100'}`}>
-                        <div className="flex-1">
-                          <p className="text-sm font-bold text-slate-800 flex items-center gap-2">{kt.name} <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full text-slate-500">{kt.description}</span></p>
-                          <div className="flex gap-4 mt-1">
-                            <span className="text-[9px] font-black text-slate-400 uppercase">Speed: {kt.speed}x</span>
-                            <span className="text-[9px] font-black text-slate-400 uppercase">Agility: {kt.agility}x</span>
-                            <span className="text-[9px] font-black text-emerald-500 uppercase">HP: +{kt.healthBonus}</span>
+                {shopTab === 'kites' && (
+                  <>
+                    <section>
+                      <h3 className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Kite Types (Performance)</h3>
+                      <div className="grid grid-cols-1 gap-3">
+                        {KITE_TYPES.map(kt => (
+                          <div key={kt.id} className={`p-4 border-2 rounded-2xl flex justify-between items-center transition-all ${selectedKite.id === kt.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                            <div className="flex-1">
+                              <p className="text-sm font-bold text-slate-800 flex items-center gap-2">{kt.name}</p>
+                              <p className="text-[9px] text-slate-500 leading-none mb-2">{kt.description}</p>
+                              <div className="flex gap-4">
+                                <span className="text-[9px] font-black text-blue-500 uppercase">Speed: {kt.speed}x</span>
+                                <span className="text-[9px] font-black text-orange-500 uppercase">Agil: {kt.agility}x</span>
+                                <span className="text-[9px] font-black text-emerald-500 uppercase">HP: {kt.healthBonus > 0 ? '+' : ''}{kt.healthBonus}</span>
+                              </div>
+                            </div>
+                            <button onClick={() => buyOrEquip(kt, setSelectedKite)}
+                              className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest min-w-[80px] transition-all ${unlockedItems.includes(kt.id) ? (selectedKite.id === kt.id ? 'bg-orange-500 text-white scale-105' : 'bg-slate-100 text-slate-600 hover:bg-slate-200') : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>
+                              {unlockedItems.includes(kt.id) ? (selectedKite.id === kt.id ? 'EQUIPPED' : 'SELECT') : `₹${kt.cost}`}
+                            </button>
                           </div>
-                        </div>
-                        <button onClick={() => buyOrEquip(kt, setSelectedKite)}
-                          className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest min-w-[80px] ${unlockedItems.includes(kt.id) ? (selectedKite.id === kt.id ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600') : 'bg-emerald-100 text-emerald-700'}`}>
-                          {unlockedItems.includes(kt.id) ? (selectedKite.id === kt.id ? 'EQUIPPED' : 'SELECT') : `₹${kt.cost}`}
-                        </button>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </section>
-
-                {/* Kite Designs */}
-                <section>
-                  <h3 className="text-xs font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Kite Designs (Patterns)</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {KITE_DESIGNS.map(d => (
-                      <div key={d.id} className={`p-5 border-2 rounded-[2rem] flex flex-col items-center bg-slate-50 transition-all ${selectedDesign.id === d.id ? 'border-orange-400 bg-orange-50' : 'hover:border-slate-200'}`}>
-                        <span className="text-6xl mb-4 drop-shadow-md" style={{ color: d.color }}>🪁</span>
-                        <p className="text-[10px] font-black text-slate-800 mb-2 uppercase text-center">{d.name}</p>
-                        <button onClick={() => buyOrEquip(d, setSelectedDesign)}
-                          className={`w-full py-3 rounded-xl text-[10px] font-black tracking-widest transition-all ${unlockedItems.includes(d.id) ? (selectedDesign.id === d.id ? 'bg-orange-500 text-white shadow-lg' : 'bg-white text-slate-600 border border-slate-200') : 'bg-emerald-100 text-emerald-700'}`}>
-                          {unlockedItems.includes(d.id) ? (selectedDesign.id === d.id ? 'EQUIPPED' : 'SELECT') : `₹${d.cost}`}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                {/* Manjha */}
-                <section>
-                  <h3 className="text-xs font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Manjha (Thread)</h3>
-                  <div className="grid grid-cols-1 gap-3">
-                    {MANJHA_TYPES.map(m => (
-                      <div key={m.id} className={`p-4 border-2 rounded-2xl flex justify-between items-center transition-all ${selectedManjha.id === m.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'bg-white border-slate-100'}`}>
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full border-2" style={{ backgroundColor: m.color, borderColor: 'rgba(0,0,0,0.1)' }} />
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{m.name}</p>
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Cutting Power: x{m.strength}</p>
+                    </section>
+                    <section>
+                      <h3 className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Kite Skins (Visual)</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {KITE_DESIGNS.map(d => (
+                          <div key={d.id} className={`p-5 border-2 rounded-[2rem] flex flex-col items-center bg-slate-50 transition-all ${selectedDesign.id === d.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'hover:border-slate-200'}`}>
+                            <span className="text-6xl mb-4 drop-shadow-md transform transition-transform group-hover:scale-110" style={{ color: d.color }}>🪁</span>
+                            <p className="text-[10px] font-black text-slate-800 mb-2 uppercase text-center">{d.name}</p>
+                            <button onClick={() => buyOrEquip(d, setSelectedDesign)}
+                              className={`w-full py-3 rounded-xl text-[10px] font-black tracking-widest transition-all ${unlockedItems.includes(d.id) ? (selectedDesign.id === d.id ? 'bg-orange-500 text-white shadow-lg' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100') : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>
+                              {unlockedItems.includes(d.id) ? (selectedDesign.id === d.id ? 'EQUIPPED' : 'SELECT') : `₹${d.cost}`}
+                            </button>
                           </div>
-                        </div>
-                        <button onClick={() => buyOrEquip(m, setSelectedManjha)}
-                          className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest min-w-[80px] ${unlockedItems.includes(m.id) ? (selectedManjha.id === m.id ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600') : 'bg-emerald-100 text-emerald-700'}`}>
-                          {unlockedItems.includes(m.id) ? (selectedManjha.id === m.id ? 'EQUIPPED' : 'SELECT') : `₹${m.cost}`}
-                        </button>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </section>
+                    </section>
+                  </>
+                )}
 
-                {/* Chakri */}
-                <section>
-                  <h3 className="text-xs font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Chakri Designs</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {CHAKRI_DESIGNS.map(c => (
-                      <div key={c.id} className={`p-4 border-2 rounded-2xl flex flex-col items-center transition-all ${selectedChakri.id === c.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'bg-white border-slate-100'}`}>
-                        <div className="text-4xl mb-2">{c.emoji}</div>
-                        <p className="text-[10px] font-black text-slate-800 mb-2 uppercase">{c.name}</p>
-                        <button onClick={() => buyOrEquip(c, setSelectedChakri)}
-                          className={`w-full py-2 rounded-xl text-[10px] font-black tracking-widest ${unlockedItems.includes(c.id) ? (selectedChakri.id === c.id ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600') : 'bg-emerald-100 text-emerald-700'}`}>
-                          {unlockedItems.includes(c.id) ? (selectedChakri.id === c.id ? 'EQUIPPED' : 'SELECT') : `₹${c.cost}`}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                {/* Outfits */}
-                <section>
-                  <h3 className="text-xs font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Outfits</h3>
-                  <div className="grid grid-cols-1 gap-3">
-                    {OUTFIT_DESIGNS.map(o => (
-                      <div key={o.id} className={`p-4 border-2 rounded-2xl flex justify-between items-center transition-all ${selectedOutfit.id === o.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'bg-white border-slate-100'}`}>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full" style={{ backgroundColor: o.color }} />
-                          <p className="text-sm font-bold text-slate-800">{o.name}</p>
+                {shopTab === 'manjha' && (
+                  <section>
+                    <h3 className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">String Selection</h3>
+                    <div className="grid grid-cols-1 gap-4">
+                      {MANJHA_TYPES.map(m => (
+                        <div key={m.id} className={`p-5 border-2 rounded-2xl flex justify-between items-center transition-all ${selectedManjha.id === m.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                          <div className="flex items-center gap-5">
+                            <div className="w-12 h-12 rounded-full border-4 shadow-inner flex items-center justify-center" style={{ backgroundColor: m.color, borderColor: 'rgba(0,0,0,0.05)' }}>
+                               <div className="w-8 h-8 rounded-full bg-white/20 border border-white/40" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">{m.name}</p>
+                              <div className="flex gap-3">
+                                <span className="text-[9px] font-black text-rose-500 uppercase">Power: {m.strength}x</span>
+                                <span className="text-[9px] font-black text-slate-400 uppercase">Durability: {m.durability}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <button onClick={() => buyOrEquip(m, setSelectedManjha)}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest min-w-[90px] transition-all ${unlockedItems.includes(m.id) ? (selectedManjha.id === m.id ? 'bg-orange-500 text-white scale-105' : 'bg-slate-100 text-slate-600 hover:bg-slate-200') : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>
+                            {unlockedItems.includes(m.id) ? (selectedManjha.id === m.id ? 'EQUIPPED' : 'SELECT') : `₹${m.cost}`}
+                          </button>
                         </div>
-                        <button onClick={() => buyOrEquip(o, setSelectedOutfit)}
-                          className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest min-w-[80px] ${unlockedItems.includes(o.id) ? (selectedOutfit.id === o.id ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600') : 'bg-emerald-100 text-emerald-700'}`}>
-                          {unlockedItems.includes(o.id) ? (selectedOutfit.id === o.id ? 'EQUIPPED' : 'SELECT') : `₹${o.cost}`}
-                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {shopTab === 'gear' && (
+                  <>
+                    <section>
+                      <h3 className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Chakri Reel</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        {CHAKRI_DESIGNS.map(c => (
+                          <div key={c.id} className={`p-4 border-2 rounded-3xl flex flex-col items-center transition-all ${selectedChakri.id === c.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                            <div className="text-5xl mb-3 transform hover:rotate-12 transition-transform">{c.emoji}</div>
+                            <p className="text-[10px] font-black text-slate-800 mb-3 uppercase">{c.name}</p>
+                            <button onClick={() => buyOrEquip(c, setSelectedChakri)}
+                              className={`w-full py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all ${unlockedItems.includes(c.id) ? (selectedChakri.id === c.id ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200') : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>
+                              {unlockedItems.includes(c.id) ? (selectedChakri.id === c.id ? 'EQUIPPED' : 'SELECT') : `₹${c.cost}`}
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </section>
+                    </section>
+                    <section>
+                      <h3 className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest border-b pb-1">Flyer Outfits</h3>
+                      <div className="grid grid-cols-1 gap-3">
+                        {OUTFIT_DESIGNS.map(o => (
+                          <div key={o.id} className={`p-4 border-2 rounded-2xl flex justify-between items-center transition-all ${selectedOutfit.id === o.id ? 'border-orange-400 bg-orange-50 shadow-md' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-full shadow-inner border-2" style={{ backgroundColor: o.color, borderColor: o.secondary }} />
+                              <p className="text-sm font-bold text-slate-800">{o.name}</p>
+                            </div>
+                            <button onClick={() => buyOrEquip(o, setSelectedOutfit)}
+                              className={`px-4 py-2 rounded-xl text-[10px] font-black tracking-widest min-w-[90px] transition-all ${unlockedItems.includes(o.id) ? (selectedOutfit.id === o.id ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200') : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}>
+                              {unlockedItems.includes(o.id) ? (selectedOutfit.id === o.id ? 'EQUIPPED' : 'SELECT') : `₹${o.cost}`}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -329,7 +417,7 @@ const App: React.FC = () => {
             <p className="text-slate-500 font-black text-xs uppercase mb-10 tracking-[0.3em]">You Cleared the Sky!</p>
             <div className="bg-slate-50 p-6 rounded-3xl mb-10 border-b-4 border-slate-200">
               <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Location Unlocked</p>
-              <p className="text-3xl font-bangers text-slate-800 tracking-wider">{LEVEL_DESIGNS[Math.min(LEVEL_DESIGNS.length-1, currentLevelIndex+1)].location}</p>
+              <p className="text-3xl font-bangers text-slate-800 tracking-wider">{LEVEL_DESIGNS[Math.min(LEVEL_DESIGNS.length-1, currentLevelIndex+1)]?.location || 'Final Champion'}</p>
             </div>
             <button onClick={(e) => { e.stopPropagation(); setCurrentLevelIndex(p => Math.min(LEVEL_DESIGNS.length - 1, p+1)); setGameState(GameState.LAUNCHING); }} 
               className="w-full bg-emerald-600 text-white font-bangers text-4xl py-6 rounded-2xl shadow-xl hover:bg-emerald-700 active:scale-95 transition-all border-b-8 border-emerald-900">

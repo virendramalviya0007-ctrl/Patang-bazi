@@ -27,6 +27,12 @@ class SoundManager {
     this.playAmbientBirds();
   }
 
+  setMasterVolume(val: number) {
+    if (this.masterGain) {
+      this.masterGain.gain.setTargetAtTime(val, this.ctx?.currentTime || 0, 0.1);
+    }
+  }
+
   private playAmbientBirds() {
     if (!this.ctx || !this.birdsGain) return;
     const osc = this.ctx.createOscillator();
